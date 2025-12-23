@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="format-detection" content="telephone=no">
+  <title>МедПомощник</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      /* background: #f9f9f9; */
+      background: 
+      /* linear-gradient(rgba(134, 213, 231, 0.7), rgba(23, 162, 248, 0.7)), */
+      url('https://raw.githubusercontent.com/igoshina-dm/med-assistant/main/img/med.jpg') no-repeat center bottom / cover;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 25px;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 25px;
+      color: #2c5282;
+    }
+    .step { display: none; }
+    .step.active { display: block; }
+
+    .btn {
+      display: inline-block;
+      margin: 6px 4px;
+      padding: 10px 16px;
+      background: #edf2f7;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 15px;
+      text-align: center;
+    }
+    .btn.active, .btn.selected {
+      background: #4299e1;
+      color: white;
+    }
+    .btn-wide {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 18px;
+      background: #f0f9ff;
+      border-left: 4px solid #3182ce;
+      border-radius: 8px;
+    }
+
+    .warning {
+      font-size: 12px;
+      color: #e53e3e;
+      margin-top: 20px;
+      font-style: italic;
+      text-align: center;
+    }
+
+    .back-btn {
+      margin-top: 20px;
+      background: #cbd5e0 !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🩺 МедПомощник</h1>
+    <p style="text-align: center; color: #666;">Выберите возраст → симптомы → получите рекомендацию</p>
+
+    <!-- Шаг 1: Возраст -->
+    <div class="step active" id="step-age">
+      <h3>1. Кому нужна помощь?</h3>
+      <div style="text-align: center; margin-top: 15px;">
+        <button class="btn" onclick="selectAge('adult')">Взрослому</button>
+        <button class="btn" onclick="selectAge('child')">Ребёнку</button>
+      </div>
+    </div>
+
+    <!-- Шаг 2: Симптомы -->
+    <div class="step" id="step-symptoms">
+      <h3>2. Выберите симптомы:</h3>
+      <div id="symptoms-buttons" style="margin-top: 15px; text-align: center;"></div>
+      <button class="btn btn-wide btn-secondary" onclick="goToStep('step-age')">← Назад</button>
+      <button class="btn btn-wide" id="btn-get-advice" onclick="showAdvice()" disabled>Получить рекомендацию</button>
+    </div>
+
+    <!-- Шаг 3: Результат -->
+    <div class="step" id="step-result">
+      <h3>3. Рекомендация:</h3>
+      <div class="result" id="advice-text"></div>
+      <button class="btn btn-wide back-btn" onclick="resetAndGoBack()">Попробовать снова</button>
+    </div>
+
+    <p class="warning">❗️ Это не замена врачу. При сомнениях — срочно обратитесь к специалисту!</p>
+  </div>
+
+  <script>
+    let userAge = null;
+    const selectedSymptoms = new Set();
+
+    const SYMPTOMS = [
+      { id: 'headache', label: 'Головная боль' },
+      { id: 'fever', label: 'Температура' },
+      { id: 'abdomen_right', label: 'Боль в правом боку' },
+      { id: 'abdomen_left', label: 'Боль в левом боку' },
+      { id: 'nausea', label: 'Тошнота' },
+      { id: 'arm_leg_pain', label: 'Боль в руке/ноге' },
+      { id: 'rash', label: 'Высыпания на коже' },
+      { id: 'weakness', label: 'Слабость' }
+    ];
+
+    const KNOWLEDGE = [
+      {
+        symptoms: ['fever', 'headache', 'nausea'],
+        adult: 'Возможно, грипп или ОРВИ. Отдых, питьё, измеряйте температуру. При температуре выше 38.5°C — жаропонижающее. Если симптомы не улучшаются через 2–3 дня — к врачу.',
+        child: 'У ребёнка температура + головная боль + тошнота — это тревожный сигнал! Не давайте лекарства без консультации. Срочно вызовите педиатра или скорую.'
+      },
+      {symptoms: ['abdomen_right', 'fever', 'nausea'],
+        adult: '⚠️ Это может быть аппендицит или проблемы с печенью/желчным. НЕ принимайте обезболивающее! Срочно обратитесь к врачу или вызовите скорую.',
+        child: '⚠️ У ребёнка боль в правом боку + температура — возможен аппендицит. Это экстренная ситуация! Немедленно вызывайте скорую помощь.'
+      },
+      {
+        symptoms: ['headache'],
+        adult: 'Отдых, проветрите помещение, выпейте воды. Можно принять ибупрофен или парацетамол. Если головная боль не проходит больше 24 часов — к врачу.',
+        child: 'Дайте ребёнку отдохнуть в тишине. Не давайте лекарства без совета врача. Если боль сильная или повторяется — покажите педиатру.'
+      },
+      {
+        symptoms: ['fever'],
+        adult: 'Пейте воду, отдыхайте. При температуре выше 38.5°C — жаропонижающее. Если держится больше 3 дней — к врачу.',
+        child: 'У ребёнка температура — следите за состоянием. Не кутайте, дайте пить. При температуре выше 38°C или вялости — вызовите врача.'
+      },
+      {
+        symptoms: ['arm_leg_pain'],
+        adult: 'Возможно, ушиб или перенапряжение. Обеспечьте покой конечности. При сильной боли, отеке или невозможности двигать — к врачу (исключить перелом или тромб).',
+        child: 'У ребёнка боль в конечности — возможно, травма. Не давайте обезболивающее. Покажите врачу, особенно если ребёнок не наступает на ногу или не двигает рукой.'
+      },
+      {
+        symptoms: ['rash'],
+        adult: 'Не чешите! Возможна аллергия или инфекция. Обратитесь к дерматологу. При зуде — можно принять антигистаминное (если нет противопоказаний).',
+        child: 'Высыпания у ребёнка — возможна ветрянка, корь или аллергия. Не занимайтесь самолечением! Покажите педиатру как можно скорее.'
+      },
+      {
+        symptoms: ['weakness', 'fever'],
+        adult: 'Организм борется с инфекцией. Отдых, питьё, наблюдение. При сильной слабости или одышке — срочно к врачу.',
+        child: 'Слабость + температура у ребёнка — повод для беспокойства. Вызовите врача на дом.'
+      }
+    ];
+
+    function goToStep(stepId) {
+      document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+      document.getElementById(stepId).classList.add('active');
+    }
+
+    function selectAge(age) {
+      userAge = age;
+      renderSymptoms();
+      goToStep('step-symptoms');
+    }
+
+    function renderSymptoms() {
+      const container = document.getElementById('symptoms-buttons');
+      container.innerHTML = '';
+      SYMPTOMS.forEach(sym => {
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = sym.label;
+        btn.onclick = () => toggleSymptom(sym.id, btn);
+        container.appendChild(btn);
+      });
+      updateGetAdviceButton();
+    }
+
+    function toggleSymptom(symptomId, button) {
+      if (selectedSymptoms.has(symptomId)) {
+        selectedSymptoms.delete(symptomId);
+        button.classList.remove('selected');
+      } else {
+        selectedSymptoms.add(symptomId);
+        button.classList.add('selected');
+      }
+      updateGetAdviceButton();
+    }
+
+    function updateGetAdviceButton() {
+      document.getElementById('btn-get-advice').disabled = selectedSymptoms.size === 0;
+    }
+
+    function findBestAdvice() {
+      let bestMatch = null;
+      let maxMatch = 0;
+
+      for (const rule of KNOWLEDGE) {
+        const ruleSet = new Set(rule.symptoms);
+        const matches = [...selectedSymptoms].filter(s => ruleSet.has(s)).length;
+        if (matches === ruleSet.size && matches > maxMatch) {
+          bestMatch = rule;
+          maxMatch = matches;
+        }
+      }
+
+      if (!bestMatch) {
+        for (const rule of KNOWLEDGE) {
+          const ruleSet = new Set(rule.symptoms);
+          const matches = [...selectedSymptoms].filter(s => ruleSet.has(s)).length;
+          if (matches > 0 && matches > maxMatch) {
+            bestMatch = rule;
+            maxMatch = matches;
+          }
+        }
+      }
+
+      if (bestMatch) {
+        return userAge === 'child' ? bestMatch.child : bestMatch.adult;}
+
+      // fallback
+      if (selectedSymptoms.has('fever')) {
+        return userAge === 'child'
+          ? 'У ребёнка температура — следите за состоянием. Не кутайте, дайте пить. При температуре выше 38°C — вызовите врача.'
+          : 'Пейте воду, отдыхайте. При температуре выше 38.5°C — жаропонижающее. Если держится больше 3 дней — к врачу.';
+      } else if (selectedSymptoms.has('headache')) {
+        return userAge === 'child'
+          ? 'Дайте ребёнку отдохнуть. Не давайте лекарства без совета врача.'
+          : 'Отдых, вода, проветривание. Можно ибупрофен. Если не проходит 24ч — к врачу.';
+      } else {
+        return 'Общая рекомендация: обеспечьте покой, пейте воду, наблюдайте за состоянием. При ухудшении — сразу к врачу.';
+      }
+    }
+
+    function showAdvice() {
+      const advice = findBestAdvice();
+      document.getElementById('advice-text').textContent = advice;
+      goToStep('step-result');
+    }
+
+    function resetAndGoBack() {
+      selectedSymptoms.clear();
+      userAge = null;
+      goToStep('step-age');
+    }
+  </script>
+</body>
+</html>
